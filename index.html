@@ -219,6 +219,32 @@
     color: var(--navy);
   }
   .info-note strong { font-weight: 700; }
+  .swatch.klikbaar { cursor: pointer; }
+  .swatch.klikbaar .dot {
+    transition: transform 0.12s ease;
+  }
+  .swatch.klikbaar:hover .dot {
+    transform: scale(1.12);
+  }
+  .swatch .dot.los {
+    box-shadow: 0 0 0 2.5px var(--goud);
+  }
+  .opslag-hint {
+    margin: 16px 0 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--navy);
+    opacity: 0.75;
+  }
+  .wis-btn {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: var(--navy);
+    text-decoration: underline;
+    cursor: pointer;
+  }
   footer .versie {
     display: inline-block;
     margin-top: 6px;
@@ -431,7 +457,18 @@ document.addEventListener('DOMContentLoaded', () => {
 const ohuhuByName = {};
 OHUHU.forEach(c => { ohuhuByName[c.naam] = c; });
 
-let ownedSetjes = new Set();
+function laadOpslag(sleutel) {
+  try {
+    const raw = localStorage.getItem(sleutel);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function bewaarOpslag(sleutel, verzameling) {
+  try { localStorage.setItem(sleutel, JSON.stringify([...verzameling])); } catch (e) {}
+}
+
+let ownedSetjes = new Set(laadOpslag('kleurenbieb_setjes'));
+let ownedLos = new Set(laadOpslag('kleurenbieb_los'));
 
 // Paletten worden onderaan de PALETTEN-array toegevoegd, dus omgekeerd tonen
 // zet vanzelf het nieuwste palet bovenaan.
@@ -439,12 +476,22 @@ function nieuwsteEerst() {
   return PALETTEN.slice().reverse();
 }
 
-function swatchHtml(kleurNaam, missing) {
+function escHtml(t) {
+  return String(t).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function swatchHtml(kleurNaam, missing, klikbaar) {
   const c = ohuhuByName[kleurNaam];
   if (!c) return '';
-  const dotClass = missing ? 'dot missing' : 'dot';
+  const viaSetje = heeftViaSetje(kleurNaam);
+  const losAan = ownedLos.has(kleurNaam);
+  let dotClass = missing ? 'dot missing' : 'dot';
+  if (losAan) dotClass += ' los';
   const anderNaam = c.oudnaam && c.oudnaam.toLowerCase() !== c.naam.toLowerCase();
-  return `<div class="swatch">
+  const extra = (klikbaar && !viaSetje)
+    ? ` klikbaar" data-kleur="${escHtml(kleurNaam)}" title="${losAan ? 'Klik om weer als ontbrekend te zetten' : 'Heb je deze stift los? Klik om aan te vinken'}`
+    : '';
+  return `<div class="swatch${extra}">
     <div class="${dotClass}" style="background:${c.hex}"></div>
     <div class="codes">
       <span class="nw">${c.nieuw || '—'}</span>
@@ -490,13 +537,15 @@ function renderMijnSetjes() {
     setjesHtml += `<div class="serie-group"><h3>${serie}</h3><div class="checks">`;
     SETJES_GROUPS[serie].forEach(s => {
       const id = 'set_' + s.replace(/[^a-zA-Z0-9]/g, '_');
-      setjesHtml += `<label class="chk" for="${id}">
-        <input type="checkbox" id="${id}" value="${s}" onchange="toggleSetje(this)">
+      const aan = ownedSetjes.has(s);
+      setjesHtml += `<label class="chk${aan ? ' checked' : ''}" for="${id}">
+        <input type="checkbox" id="${id}" value="${s}"${aan ? ' checked' : ''} onchange="toggleSetje(this)">
         ${s}
       </label>`;
     });
     setjesHtml += `</div></div>`;
   });
+  setjesHtml += `<p class="opslag-hint">Je keuzes worden bewaard op dit apparaat, dus de volgende keer staat alles nog goed. Heb je een kleur los gekocht? Klik hieronder op het kruisje bij die kleur, dan telt hij gewoon mee. <button type="button" class="wis-btn" onclick="wisSelectie()">Alles wissen</button></p>`;
   setjesHtml += `</div><div id="mijn-resultaten"></div>`;
   el.innerHTML = setjesHtml;
   renderMijnResultaten();
@@ -506,14 +555,35 @@ function toggleSetje(input) {
   if (input.checked) { ownedSetjes.add(input.value); }
   else { ownedSetjes.delete(input.value); }
   input.closest('label').classList.toggle('checked', input.checked);
+  bewaarOpslag('kleurenbieb_setjes', ownedSetjes);
   renderMijnResultaten();
 }
 
-function heeftKleur(kleurNaam) {
+function heeftViaSetje(kleurNaam) {
   const c = ohuhuByName[kleurNaam];
-  if (!c) return false;
-  if (ownedSetjes.size === 0) return false;
+  if (!c || ownedSetjes.size === 0) return false;
   return c.setjes.some(s => ownedSetjes.has(s));
+}
+
+function heeftKleur(kleurNaam) {
+  if (ownedLos.has(kleurNaam)) return true;
+  return heeftViaSetje(kleurNaam);
+}
+
+function toggleLos(kleurNaam) {
+  if (heeftViaSetje(kleurNaam)) return;
+  if (ownedLos.has(kleurNaam)) { ownedLos.delete(kleurNaam); }
+  else { ownedLos.add(kleurNaam); }
+  bewaarOpslag('kleurenbieb_los', ownedLos);
+  renderMijnResultaten();
+}
+
+function wisSelectie() {
+  ownedSetjes.clear();
+  ownedLos.clear();
+  bewaarOpslag('kleurenbieb_setjes', ownedSetjes);
+  bewaarOpslag('kleurenbieb_los', ownedLos);
+  renderMijnSetjes();
 }
 
 function renderMijnResultaten() {
@@ -526,7 +596,7 @@ function renderMijnResultaten() {
     </div>`;
     return;
   }
-  if (ownedSetjes.size === 0) {
+  if (ownedSetjes.size === 0 && ownedLos.size === 0) {
     el.innerHTML = `<div class="empty-state">
       <div class="emoji">👆</div>
       <h2>Kies eerst je setjes hierboven</h2>
@@ -543,7 +613,7 @@ function renderMijnResultaten() {
       </div>
       ${p.sfeer ? `<span class="sfeer">${p.sfeer}</span>` : ''}
       <div class="swatches">
-        ${p.kleuren.map(k => swatchHtml(k, !heeftKleur(k))).join('')}
+        ${p.kleuren.map(k => swatchHtml(k, !heeftKleur(k), true)).join('')}
       </div>
       <div class="completion ${compleet ? 'compleet' : 'mist'}">
         ${compleet ? '✓ Compleet met jouw setjes!' : `Je mist nog ${missing.length} kleur${missing.length === 1 ? '' : 'en'}`}
@@ -559,6 +629,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
   });
+});
+
+document.getElementById('panel-mijn').addEventListener('click', (e) => {
+  const sw = e.target.closest('.swatch.klikbaar');
+  if (sw && sw.dataset.kleur) toggleLos(sw.dataset.kleur);
 });
 
 renderBieb();
