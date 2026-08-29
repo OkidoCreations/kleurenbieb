@@ -219,6 +219,12 @@
     color: var(--navy);
   }
   .info-note strong { font-weight: 700; }
+  footer .versie {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    opacity: 0.65;
+  }
 
   .completion {
     margin-top: 16px;
@@ -389,7 +395,7 @@
   <div id="panel-bieb" class="panel active"></div>
   <div id="panel-mijn" class="panel"></div>
 
-  <footer>Okido Creations · Kleurenbieb wordt bijgewerkt zodra er nieuwe paletten zijn toegevoegd</footer>
+  <footer>Okido Creations · Kleurenbieb wordt bijgewerkt zodra er nieuwe paletten zijn toegevoegd<br><span class="versie">Laatst bijgewerkt: 29 augustus 2026 · 17 paletten</span></footer>
 </div>
 </div>
 
@@ -427,6 +433,12 @@ OHUHU.forEach(c => { ohuhuByName[c.naam] = c; });
 
 let ownedSetjes = new Set();
 
+// Paletten worden onderaan de PALETTEN-array toegevoegd, dus omgekeerd tonen
+// zet vanzelf het nieuwste palet bovenaan.
+function nieuwsteEerst() {
+  return PALETTEN.slice().reverse();
+}
+
 function swatchHtml(kleurNaam, missing) {
   const c = ohuhuByName[kleurNaam];
   if (!c) return '';
@@ -455,7 +467,7 @@ function renderBieb() {
     </div>`;
     return;
   }
-  el.innerHTML = `<div class="grid">` + PALETTEN.map(p => `
+  el.innerHTML = `<div class="grid">` + nieuwsteEerst().map(p => `
     <div class="card">
       <div class="card-head">
         <p class="card-title">${p.naam}</p>
@@ -522,7 +534,7 @@ function renderMijnResultaten() {
     </div>`;
     return;
   }
-  el.innerHTML = `<div class="grid">` + PALETTEN.map(p => {
+  el.innerHTML = `<div class="grid">` + nieuwsteEerst().map(p => {
     const missing = p.kleuren.filter(k => !heeftKleur(k));
     const compleet = missing.length === 0;
     return `<div class="card">
